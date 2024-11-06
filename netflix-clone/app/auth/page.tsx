@@ -34,16 +34,26 @@ const Auth = () => {
 
     const login = useCallback(async () => {
         try {
-            await signIn('credentials', {
+            const result = await signIn('credentials', {
                 email,
                 password,
                 redirect: false,
-                callbackUrl: '/'
+                callbackUrl: '/' 
             });
+    
+            if (result?.error) {
+                alert("Login failed: " + result.error);
+            } else {
+                
+                window.location.href = result?.url || '/'; 
+            }
         } catch (error) {
-            console.log(error);
+            console.error("Login error: ", error);
         }
-    }, [email, password]);    
+    }, [email, password]);
+    
+    
+        
 
     return (
         <div className="relative h-full w-full bg-[url('/images/hero.jpg')] bg-no-repeat bg-center bg-fixed bg-cover">
