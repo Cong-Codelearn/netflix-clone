@@ -1,11 +1,25 @@
 import NextAuth from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
+import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcrypt';
+
+import GithubProvider from 'next-auth/providers/github';
+import GoogleProvider from 'next-auth/providers/google';
+
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
+
 import prismadb from '@/lib/prismadb';
 
 const authOptions = {
     providers: [
-        CredentialsProvider({
+        GithubProvider({
+            clientId: process.env.GITHUB_ID || '',
+            clientSecret: process.env.GITHUB_SECRET || ''
+        }),
+        GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID || '',
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || ''
+        }),
+        Credentials({
             id: 'credentials',
             name: 'Credentials',
             credentials: {
@@ -25,7 +39,10 @@ const authOptions = {
                     throw new Error('Email does not exist');
                 }
             
-                const isCorrectPassword = await compare(credentials.password, user.hashedPassword);
+                const isCorrectPassword = await compare(
+                    credentials.password, 
+                    user.hashedPassword
+                );
             
                 if (!isCorrectPassword) {
                     throw new Error('Incorrect password');
@@ -39,6 +56,7 @@ const authOptions = {
         signIn: '/auth',
     },
     debug: process.env.NODE_ENV === 'development',
+    adapter: PrismaAdapter(prismadb),
     session: {
         strategy: 'jwt',
     },
@@ -46,12 +64,31 @@ const authOptions = {
         secret: process.env.NEXTAUTH_JWT_SECRET,
     },
     secret: process.env.NEXTAUTH_SECRET,
+    callbacks: {
+        async signIn({ user, account, profile }) {
+            if (user) {
+                
+                const normalizedUserData = {
+                    email: user.email,
+                    name: profile.name ? profile.name.trim() : user.name, 
+                    image: profile.image || '', 
+                    emailVerified: user.emailVerified || null
+                };
+    
+                await prismadb.user.upsert({
+                    where: { email: normalizedUserData.email },
+                    update: { 
+                        name: normalizedUserData.name, 
+                        image: normalizedUserData.image,
+                        emailVerified: normalizedUserData.emailVerified
+                    },
+                    create: normalizedUserData, 
+                });
+            }
+            return true;
+        },
+    }    
 };
 
-export async function GET(req: Request) {
-    return NextAuth(req, authOptions);
-}
-
-export async function POST(req: Request) {
-    return NextAuth(req, authOptions);
-}
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
